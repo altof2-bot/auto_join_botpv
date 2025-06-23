@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from deep_translator import GoogleTranslator
 
-API_TOKEN = 'TON_TOKEN_ICI'
+API_TOKEN = '8060443022:AAEHQd8UPCZyKglaY3QQn9KYu7lc2I63BaY'
 CANAL_USERNAME = 'sineur_x_bot'
 ADMINS = [5116530698]
 
