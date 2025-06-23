@@ -1,82 +1,106 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, ChatJoinRequestHandler, filters
-from keep_alive import keep_alive
+import asyncio
+import requests
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command
+from deep_translator import GoogleTranslator
 
-TOKEN = ""
-ADMIN_IDS = 5116530698 
-USER_LIST = set()  # Stocker les utilisateurs sous forme d'ensemble pour éviter les doublons
+API_TOKEN = 'TON_TOKEN_ICI'
+CANAL_USERNAME = 'sineur_x_bot'
+ADMINS = [5116530698]
 
-async def start(update: Update, context):
-    keyboard = [
-        [InlineKeyboardButton("➕ Ajouter au Groupe 💬", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-        [InlineKeyboardButton("👑 Ajouter au Canal 📢", url=f"https://t.me/{context.bot.username}")],
-        [InlineKeyboardButton("🔄 Mise à jour 📲", url="https://t.me/sineur_x_bot")],
-        [InlineKeyboardButton("🆘 Support", url="https://t.me/originstation")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher()
 
-    await update.message.reply_text(
-        "🔥 Bienvenue sur notre bot ! 🎉\n\n"
-        "Ce bot gère **automatiquement** les demandes d'adhésion aux groupes et canaux Telegram, "
-        "sans intervention manuelle des administrateurs. "
-        "Utilisez les boutons ci-dessous pour découvrir ses fonctionnalités.",
-        reply_markup=reply_markup
-    )
-
-async def broadcast_message(update: Update, context):
-    if update.effective_user.id in ADMIN_IDS:
-        if USER_LIST:
-            for user_id in USER_LIST:
-                try:
-                    await context.bot.send_message(chat_id=user_id, text="📢 Annonce pour tous les utilisateurs !")
-                except Exception as e:
-                    print(f"Erreur en envoyant le message à {user_id}: {e}")
-            await update.message.reply_text("✅ Message envoyé à tous les utilisateurs !")
-        else:
-            await update.message.reply_text("⚠️ Aucun utilisateur enregistré.")
-    else:
-        await update.message.reply_text("🚫 Vous n'avez pas accès à cette commande.")
-
-async def view_stats(update: Update, context):
-    if update.effective_user.id in ADMIN_IDS:
-        total_users = len(USER_LIST)
-        print(f"Liste des utilisateurs : {USER_LIST}")  # Ajout d'un log pour le diagnostic
-        await update.message.reply_text(f"📊 Nombre total d'utilisateurs : {total_users}")
-    else:
-        await update.message.reply_text("🚫 Vous n'avez pas accès à cette commande.")
-
-async def auto_accept_channel(update: Update, context):
+# Obtenir l’IP publique
+def get_public_ip():
     try:
-        chat_id = update.chat_join_request.chat.id
-        user_id = update.chat_join_request.from_user.id
+        response = requests.get('https://api.ipify.org')
+        return response.text
+    except:
+        return "IP non disponible"
 
-        await context.bot.approve_chat_join_request(chat_id=chat_id, user_id=user_id)
-        USER_LIST.add(user_id)
+# Commande /start
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    ip_address = get_public_ip()
+    bouton = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔗 Rejoindre le canal", url=f"https://t.me/{CANAL_USERNAME}")]
+    ])
+    texte = (
+        "👋 Bienvenue sur le bot !\n"
+        f"🌐 IP du serveur : {ip_address}\n"
+        "🔒 Ce bot imite un comportement humain pour éviter le bannissement."
+    )
+    await message.answer(texte, reply_markup=bouton)
 
-        keyboard = [[InlineKeyboardButton("🔹 Rejoindre le support", url="https://t.me/sineur_x_bot")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+# Commande /admin
+@dp.message(Command("admin"))
+async def admin_panel(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        await message.reply("⛔ Accès refusé.")
+        return
+    await message.reply("🔐 Panneau admin :\n- /stats\n- /add_admin [ID]\n- /del_admin [ID]\n- /broadcast [message]")
 
-        await context.bot.send_message(chat_id=user_id, text="🎉 Votre demande d'adhésion a été acceptée automatiquement ! Bienvenue 👋", reply_markup=reply_markup)
-    except Exception as e:
-        print(f"Erreur lors de l'acceptation automatique : {e}")
+# Commande /stats
+@dp.message(Command("stats"))
+async def stats(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    await message.reply("📊 Statistiques :\n- Utilisateurs : à implémenter\n- Messages envoyés : à implémenter")
 
-async def track_new_users(update: Update, context):
-    user_id = update.effective_user.id
-    if user_id not in USER_LIST:
-        USER_LIST.add(user_id)
-        print(f"Utilisateur ajouté : {user_id}")  # Confirmation dans le log
+# Ajouter un admin
+@dp.message(Command("add_admin"))
+async def add_admin(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    try:
+        new_id = int(message.text.split()[1])
+        if new_id not in ADMINS:
+            ADMINS.append(new_id)
+            await message.reply(f"✅ Admin ajouté : {new_id}")
+    except:
+        await message.reply("❌ Utilisation : /add_admin [ID]")
 
-def main():
-    keep_alive()
-    app = Application.builder().token(TOKEN).build()
+# Supprimer un admin
+@dp.message(Command("del_admin"))
+async def del_admin(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    try:
+        del_id = int(message.text.split()[1])
+        if del_id in ADMINS:
+            ADMINS.remove(del_id)
+            await message.reply(f"✅ Admin supprimé : {del_id}")
+    except:
+        await message.reply("❌ Utilisation : /del_admin [ID]")
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_new_users))
-    app.add_handler(ChatJoinRequestHandler(auto_accept_channel))
-    app.add_handler(CommandHandler("broadcast", broadcast_message))  # Renommé en "broadcast"
-    app.add_handler(CommandHandler("view_stats", view_stats))
+# Broadcast
+@dp.message(Command("broadcast"))
+async def broadcast(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    text = message.text.partition(' ')[2]
+    await message.reply("📢 Fonction de diffusion à implémenter")
 
-    app.run_polling()
+# ✅ Traduction automatique (ex: pour canal)
+@dp.message()
+async def translate_auto(message: types.Message):
+    await bot.send_chat_action(message.chat.id, "typing")
+    await asyncio.sleep(1)
 
-if __name__ == "__main__":
-    main()
+    original = message.text
+    try:
+        translated = GoogleTranslator(source='auto', target='fr').translate(original)
+        await message.reply(f"📝 Traduction FR :\n{translated}")
+    except:
+        await message.reply("⚠️ Erreur de traduction")
+
+# Main async
+async def main():
+    print("🚀 Bot en cours d'exécution...")
+    await dp.start_polling(bot)
+
+# Lancement
+if __name__ == '__main__':
+    asyncio.run(main())
